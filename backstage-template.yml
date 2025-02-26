@@ -1,0 +1,57 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: aws-resource-provisioning
+  title: AWS Resource Provisioning
+  description: Dynamically provision any AWS resource using Terraform
+spec:
+  owner: team-devops
+  type: service
+  parameters:
+    - title: AWS Resource Selection
+      required:
+        - resource_type
+        - region
+      properties:
+        resource_type:
+          title: AWS Resource Type
+          type: string
+          description: Select which AWS resource you want to create.
+          enum:
+            - s3
+            - ec2
+            - ecr
+        region:
+          title: AWS Region
+          type: string
+          default: "ap-south-1"
+          description: "Specify AWS Region (Default: Mumbai)"
+    
+    - title: Enter Resource Parameters
+      properties:
+        parameters:
+          title: AWS Parameters
+          type: object
+          description: "Enter AWS resource-specific parameters"
+
+  steps:
+    - id: create-pr
+      name: Create GitHub PR for Terraform Plan
+      action: publish:github
+      input:
+        repoUrl: github.com?repo=aws-terraform-templates&owner=your-org
+        branch: main
+        workflow: terraform-plan.yml
+        values:
+          resource_type: ${{ parameters.resource_type }}
+          region: ${{ parameters.region }}
+          parameters: ${{ parameters.parameters }}
+
+    - id: register-in-backstage
+      name: Register in Backstage
+      action: catalog:register
+      input:
+        repoContentsUrl: https://github.com/your-org/aws-terraform-templates/blob/main/${{ parameters.resource_type }}/catalog-info.yaml
+
+  output:
+    text: "Terraform plan PR for ${{ parameters.resource_type }} created. Monitor PR and apply changes once reviewed."
