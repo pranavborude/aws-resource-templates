@@ -1,51 +1,53 @@
-name: Terraform AWS Provisioning
-
+# .github/workflows/terraform-plan.yml
+name: "Terraform Plan for ${{ parameters.resource_type }}"
 on:
-  workflow_dispatch:
-    inputs:
-      RESOURCE_TYPE:
-        description: "Type of AWS resource (e.g., s3, ec2, rds, etc.)"
-        required: true
-      PARAMETERS:
-        description: "JSON string of user inputs"
-        required: true
+  pull_request:
+    branches:
+      - main
 
 jobs:
   terraform:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v3
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.5.0
-
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1  # Change as per your requirement
+        uses: hashicorp/setup-terraform@v1
 
       - name: Initialize Terraform
-        run: |
-          cd ${{ github.event.inputs.RESOURCE_TYPE }}
-          terraform init
+        run: terraform init -backend=false
+        working-directory: ${{ parameters.resource_type }}
 
-      - name: Generate Terraform Variables File
-        run: |
-          cd ${{ github.event.inputs.RESOURCE_TYPE }}
-          echo '${{ github.event.inputs.PARAMETERS }}' > terraform.tfvars
+      - name: Plan Terraform
+        run: terraform plan -input=false -var="region=${{ parameters.region }}" ${{ steps.user-input.output.parameters }}
+        working-directory: ${{ parameters.resource_type }}
 
-      - name: Terraform Plan
+      - name: Generate Backstage Catalog File
         run: |
-          cd ${{ github.event.inputs.RESOURCE_TYPE }}
-          terraform plan
+          cat <<EOF > catalog-info.yaml
+          apiVersion: backstage.io/v1alpha1
+          kind: Resource
+          metadata:
+            name: "${{ parameters.resource_type }}-${{ steps.uuid.output.id }}"
+            description: "AWS ${{ parameters.resource_type }} provisioned in ${{ parameters.region }}"
+            tags:
+              - aws
+              - terraform
+          spec:
+            type: cloud-resource
+            owner: team-devops
+            system: aws
+            provider: terraform
+            region: ${{ parameters.region }}
+          EOF
+        working-directory: ${{ parameters.resource_type }}
 
-      - name: Terraform Apply
+      - name: Push Catalog File
         run: |
-          cd ${{ github.event.inputs.RESOURCE_TYPE }}
-          terraform apply -auto-approve
-
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git checkout -b feature/${{ parameters.resource_type }}-provision-${{ steps.uuid.output.id }}
+          git add catalog-info.yaml
+          git commit -m "Adding Backstage catalog entry for ${{ parameters.resource_type }}"
+          git push origin feature/${{ parameters.resource_type }}-provision-${{ steps.uuid.output.id }}
