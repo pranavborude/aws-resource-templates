@@ -24,8 +24,14 @@ jobs:
         working-directory: ${{ github.event.inputs.resource_type }}
 
       - name: Terraform Plan
-        run: terraform plan -input=false -var="region=${{ github.event.inputs.region }}" ${{ github.event.inputs.parameters }}
-        working-directory: ${{ github.event.inputs.resource_type }}
+        run: |
+          cd ${{ github.event.inputs.resource_type }}
+          terraform init
+          terraform plan -var-file=terraform.tfvars
+
+      # - name: Terraform Plan
+      #   run: terraform plan -input=false -var="region=${{ github.event.inputs.region }}" ${{ github.event.inputs.parameters }}
+      #   working-directory: ${{ github.event.inputs.resource_type }}
 
       - name: Generate Backstage Catalog File
         run: |
