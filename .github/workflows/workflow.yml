@@ -1,0 +1,51 @@
+name: Terraform AWS Provisioning
+
+on:
+  workflow_dispatch:
+    inputs:
+      RESOURCE_TYPE:
+        description: "Type of AWS resource (e.g., s3, ec2, rds, etc.)"
+        required: true
+      PARAMETERS:
+        description: "JSON string of user inputs"
+        required: true
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.5.0
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1  # Change as per your requirement
+
+      - name: Initialize Terraform
+        run: |
+          cd ${{ github.event.inputs.RESOURCE_TYPE }}
+          terraform init
+
+      - name: Generate Terraform Variables File
+        run: |
+          cd ${{ github.event.inputs.RESOURCE_TYPE }}
+          echo '${{ github.event.inputs.PARAMETERS }}' > terraform.tfvars
+
+      - name: Terraform Plan
+        run: |
+          cd ${{ github.event.inputs.RESOURCE_TYPE }}
+          terraform plan
+
+      - name: Terraform Apply
+        run: |
+          cd ${{ github.event.inputs.RESOURCE_TYPE }}
+          terraform apply -auto-approve
+
