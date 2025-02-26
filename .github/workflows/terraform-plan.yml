@@ -1,0 +1,65 @@
+name: "Terraform Plan for AWS Resource"
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v1
+
+      - name: Initialize Terraform
+        run: terraform init
+        working-directory: ${{ github.event.inputs.resource_type }}
+
+      - name: Terraform Plan
+        run: terraform plan -input=false -var="region=${{ github.event.inputs.region }}" ${{ github.event.inputs.parameters }}
+        working-directory: ${{ github.event.inputs.resource_type }}
+
+      - name: Generate Backstage Catalog File
+        run: |
+          cat <<EOF > catalog-info.yaml
+          apiVersion: backstage.io/v1alpha1
+          kind: Resource
+          metadata:
+            name: "${{ github.event.inputs.resource_type }}-${{ github.run_id }}"
+            description: "AWS ${{ github.event.inputs.resource_type }} provisioned in ${{ github.event.inputs.region }}"
+            tags:
+              - aws
+              - terraform
+          spec:
+            type: cloud-resource
+            owner: team-devops
+            system: aws
+            provider: terraform
+            region: ${{ github.event.inputs.region }}
+          EOF
+        working-directory: ${{ github.event.inputs.resource_type }}
+
+      - name: Push Catalog File to PR Branch
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git checkout -b feature/${{ github.event.inputs.resource_type }}-${{ github.run_id }}
+          git add ${{ github.event.inputs.resource_type }}/catalog-info.yaml
+          git commit -m "Adding Backstage catalog entry for ${{ github.event.inputs.resource_type }}"
+          git push origin feature/${{ github.event.inputs.resource_type }}-${{ github.run_id }}
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: feature/${{ github.event.inputs.resource_type }}-${{ github.run_id }}
+          title: "Provisioning AWS ${{ github.event.inputs.resource_type }}"
+          body: "This PR includes a Terraform plan for ${{ github.event.inputs.resource_type }}."
